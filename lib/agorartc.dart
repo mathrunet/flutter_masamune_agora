@@ -1,0 +1,114 @@
+part of masamune.agora;
+
+/// Manage Agora RTC.
+///
+/// You can get [uid] and [name] by executing [initialize()].
+class AgoraRTC extends Task implements ITask {
+  /// Create a Completer that matches the class.
+  ///
+  /// Do not use from external class
+  @override
+  @protected
+  Completer createCompleter() => Completer<AgoraRTC>();
+
+  /// Process to create a new instance.
+  ///
+  /// Do not use from outside the class.
+  ///
+  /// [path]: Destination path.
+  /// [isTemporary]: True if the data is temporary.
+  @override
+  @protected
+  T createInstance<T extends IClonable>(String path, bool isTemporary) =>
+      AgoraRTC._(path: path) as T;
+
+  /// User UID.
+  int get uid => this._uid;
+  int _uid;
+
+  /// The user's name.
+  String get name => this._name;
+  String _name;
+
+  /// Manage Agora RTC.
+  ///
+  /// You can get [uid] and [name] by executing [initialize()].
+  factory AgoraRTC() {
+    AgoraRTC unit = PathMap.get<AgoraRTC>(_systemPath);
+    if (unit != null) return unit;
+    Log.warning(
+        "No data was found from the pathmap. Please execute [initialize()] first.");
+    return null;
+  }
+
+  /// Manage Agora RTC.
+  ///
+  /// You can get [uid] and [name] by executing [initialize()].
+  ///
+  /// [appId]: Application ID.
+  /// [userName]: USER NAME.
+  /// [timeout]: Timeout setting.
+  static Future<AgoraRTC> initialize(
+      {@required String appId,
+      @required String userName,
+      Duration timeout = Const.timeout}) {
+    assert(isNotEmpty(appId));
+    assert(isNotEmpty(userName));
+    if (isEmpty(appId)) {
+      Log.error("The app id is invalid.");
+      return Future.delayed(Duration.zero);
+    }
+    if (isEmpty(userName)) {
+      Log.error("The user name is invalid.");
+      return Future.delayed(Duration.zero);
+    }
+    AgoraRTC unit = PathMap.get<AgoraRTC>(_systemPath);
+    if (unit != null) return unit.future;
+    unit = AgoraRTC._(path: _systemPath);
+    unit._initialize(appId: appId, userName: userName, timeout: timeout);
+    return unit.future;
+  }
+
+  static const String _systemPath = "system://agorartc";
+  AgoraRTC._({String path})
+      : super(
+            path: path, value: null, isTemporary: false, group: -1, order: 10);
+  void _initialize({String userName, String appId, Duration timeout}) async {
+    try {
+      await AgoraRtcEngine.create(appId).timeout(timeout);
+      await AgoraRtcEngine.enableWebSdkInteroperability(true).timeout(timeout);
+      AgoraRtcEngine.onRegisteredLocalUser = (name, uid) {
+        this._name = name;
+        this._uid = uid;
+        this.done();
+      };
+      await AgoraRtcEngine.registerLocalUserAccount(
+          {"userAccount": userName, "appId": appId}).timeout(timeout);
+    } catch (e) {
+      this.error(e.toString());
+    }
+  }
+
+  /// Get the protocol of the path.
+  @override
+  String get protocol => Protocol.system;
+
+  /// True if the object is temporary data.
+  @override
+  bool get isTemporary => false;
+
+  /// Destroys the object.
+  ///
+  /// Destroyed objects are not allowed.
+  void dispose() {
+    if (this.isDisposed || !this.isDisposable) return;
+    super.dispose();
+    AgoraRtcEngine.destroy();
+  }
+
+  /// Callback event when application quit.
+  @override
+  void onApplicationQuit() {
+    AgoraRtcEngine.destroy();
+  }
+}
