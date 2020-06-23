@@ -3,7 +3,7 @@ part of masamune.agora;
 /// Manage Agora RTC.
 ///
 /// You can get [uid] and [name] by executing [initialize()].
-class AgoraRTC extends Task implements ITask {
+class AgoraRTC extends TaskUnit implements ITask {
   /// Create a Completer that matches the class.
   ///
   /// Do not use from external class
