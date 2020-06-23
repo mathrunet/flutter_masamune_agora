@@ -178,24 +178,24 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
         PermissionStatus status = await Permission.camera.status;
         if (status == PermissionStatus.denied) {
           await Permission.camera.request();
-        }
-        status = await Permission.camera.status;
-        if (status != PermissionStatus.granted) {
-          this.error("You are not authorized to use the camera service. "
-                  "Check the permission settings."
-              .localize());
+          status = await Permission.camera.status;
+          if (status != PermissionStatus.granted) {
+            this.error("You are not authorized to use the camera service. "
+                    "Check the permission settings."
+                .localize());
+          }
         }
       }
       if (this.enableAudio) {
         PermissionStatus status = await Permission.microphone.status;
         if (status == PermissionStatus.denied) {
           await Permission.microphone.request();
-        }
-        status = await Permission.microphone.status;
-        if (status != PermissionStatus.granted) {
-          this.error("You are not authorized to use the microphone service. "
-                  "Check the permission settings."
-              .localize());
+          status = await Permission.microphone.status;
+          if (status != PermissionStatus.granted) {
+            this.error("You are not authorized to use the microphone service. "
+                    "Check the permission settings."
+                .localize());
+          }
         }
       }
       AgoraRtcEngine.onError = (dynamic code) {
