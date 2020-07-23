@@ -2,7 +2,7 @@ name: masamune_agora
 description: >-
   Plugin module for agora.io of Masamune framework.
   RTC and RTM available.
-version: 0.1.0+1
+version: 0.3.0
 homepage: https://mathru.net
 repository: https://github.com/mathrunet/flutter_masamune_agora
 
@@ -18,9 +18,9 @@ dependencies:
   agora_rtc_engine: ^1.0.12
   agora_rtm: ^0.9.11
   # Masamune
-  masamune_core: ^0.2.3
-  masamune_mobile: ^0.1.1
-  masamune_flutter: ^0.2.1
+  masamune_core: ^0.3.0
+  masamune_mobile: ^0.3.0
+  masamune_flutter: ^0.3.0
   masamune_localize: ^0.2.0
 
 dev_dependencies:

@@ -190,14 +190,14 @@ packages:
       name: masamune_core
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "0.2.14+2"
+    version: "0.3.0"
   masamune_flutter:
     dependency: "direct main"
     description:
       name: masamune_flutter
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "0.2.18+5"
+    version: "0.3.0+2"
   masamune_localize:
     dependency: "direct main"
     description:
@@ -211,7 +211,7 @@ packages:
       name: masamune_mobile
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "0.1.2+1"
+    version: "0.3.0"
   masamune_test:
     dependency: "direct dev"
     description:
@@ -351,7 +351,14 @@ packages:
       name: shared_preferences
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "0.5.6+3"
+    version: "0.5.8"
+  shared_preferences_linux:
+    dependency: transitive
+    description:
+      name: shared_preferences_linux
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "0.0.2+1"
   shared_preferences_macos:
     dependency: transitive
     description:
