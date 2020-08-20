@@ -94,10 +94,10 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
   static Future<AgoraRTCChannel> connect(String path,
       {String appId,
       String userName,
-      int width = 320,
-      int height = 180,
+      int width = 640,
+      int height = 360,
       int frameRate = 15,
-      int bitRate = 150,
+      int bitRate = 400,
       bool enableAudio = true,
       bool enableVideo = true,
       ChannelProfile channelProfile = ChannelProfile.LiveBroadcasting,
@@ -136,6 +136,28 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
         filter: filter);
     collection._joinRoom(appId: appId, userId: userName, timeout: timeout);
     return collection.future;
+  }
+
+  /// Close the connection.
+  ///
+  /// [path]: The path to disconnect.
+  static Future disconnect(String path) async {
+    path = path?.applyTags();
+    assert(isNotEmpty(path));
+    if (isEmpty(path)) {
+      Log.error("The path is invalid.");
+      return;
+    }
+    AgoraRTCChannel unit = AgoraRTCChannel(path);
+    if (unit == null) return;
+    await unit._disconnectIntenal();
+  }
+
+  Future _disconnectIntenal() async {
+    if (!this.isDone) return;
+    this.init();
+    await AgoraRtcEngine.leaveChannel();
+    this.done();
   }
 
   AgoraRTCChannel._(
@@ -225,6 +247,16 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
           if (this._filter != null) data = this._filter(data);
           this.add(data);
         }
+        AgoraRtcEngine.onRemoteVideoStateChanged =
+            (uid, state, reason, elapsed) {
+          DataDocument data = this.firstWhere(
+              (value) => value.getInt(Const.uid) == uid,
+              orElse: () => null);
+          if (data == null) return;
+          Log.msg("Change video state at $uid: $state");
+          data["video"] = state == 0 ? false : true;
+          this.notifyUpdate();
+        };
         Log.msg("Joined the channel: $uid, $channel");
         this.done();
       };
@@ -283,14 +315,6 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
     }
   }
 
-  /// Disconnect from the room.
-  Future disconnect() async {
-    if (!this.isDone) return;
-    this.init();
-    await AgoraRtcEngine.leaveChannel();
-    this.done();
-  }
-
   /// Gets the current local screen as a widget.
   Widget localScreen() {
     if (!this.isDone) return Container();
@@ -302,6 +326,12 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
     if (!this.isDone) return const [];
     return this.data.toList<Widget>((key, value) {
       int uid = value.getInt(Const.uid);
+      if (!value.getBool("video", true)) {
+        return Container(
+            color: Colors.black,
+            alignment: Alignment.center,
+            child: Icon(Icons.videocam_off, color: Colors.grey, size: 48));
+      }
       if (this.localUID == uid) {
         if (this.channelProfile == ChannelProfile.LiveBroadcasting &&
             this.clientRole == ClientRole.Audience) return null;
@@ -387,7 +417,7 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
     if (!this.isDone) return;
     if (mute == this._mute) return;
     this._mute = mute;
-    AgoraRtcEngine.muteLocalAudioStream(this._mute);
+    AgoraRtcEngine.muteAllRemoteAudioStreams(this._mute);
     this.notifyUpdate();
   }
 
@@ -421,6 +451,7 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
     AgoraRtcEngine.onUserJoined = null;
     AgoraRtcEngine.onUserOffline = null;
     AgoraRtcEngine.onLeaveChannel = null;
+    AgoraRtcEngine.onRemoteVideoStateChanged = null;
   }
 
   /// Get the toolbar as a widget.
@@ -450,7 +481,7 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
           ),
           RawMaterialButton(
             onPressed: () {
-              disconnect();
+              _disconnectIntenal();
               if (onDisconnect != null) onDisconnect();
             },
             child: Icon(
@@ -490,5 +521,6 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
     AgoraRtcEngine.onUserJoined = null;
     AgoraRtcEngine.onUserOffline = null;
     AgoraRtcEngine.onLeaveChannel = null;
+    AgoraRtcEngine.onRemoteVideoStateChanged = null;
   }
 }
