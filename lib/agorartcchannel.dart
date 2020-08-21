@@ -253,7 +253,6 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
               (value) => value.getInt(Const.uid) == uid,
               orElse: () => null);
           if (data == null) return;
-          Log.msg("Change video state at $uid: $state");
           data["video"] = state == 0 ? false : true;
           this.notifyUpdate();
         };
@@ -297,15 +296,17 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
         await AgoraRtcEngine.enableVideo().timeout(timeout);
       else
         await AgoraRtcEngine.disableVideo().timeout(timeout);
+      await AgoraRtcEngine.enableDualStreamMode(true).timeout(timeout);
+      await AgoraRtcEngine.setRemoteDefaultVideoStreamType(0).timeout(timeout);
       await AgoraRtcEngine.setChannelProfile(this.channelProfile)
           .timeout(timeout);
       if (this.channelProfile == ChannelProfile.LiveBroadcasting)
         await AgoraRtcEngine.setClientRole(this.clientRole).timeout(timeout);
-      await AgoraRtcEngine.setParameters(
-              '''{\"che.video.lowBitRateStreamParameter\":{\"width\":${this.width},'''
-              '''\"height\":${this.height},\"frameRate\":${this.frameRate},'''
-              '''\"bitRate\":${this.bitRate}}}''')
-          .timeout(timeout);
+      // await AgoraRtcEngine.setParameters(
+      //         '''{\"che.video.lowBitRateStreamParameter\":{\"width\":${this.width},'''
+      //         '''\"height\":${this.height},\"frameRate\":${this.frameRate},'''
+      //         '''\"bitRate\":${this.bitRate}}}''')
+      //     .timeout(timeout);
       await AgoraRtcEngine.joinChannelByUserAccount({
         "userAccount": _app.name,
         "channelId": this.path.replaceAll(RegExp(r"[^0-9a-zA-Z]"), Const.empty)
