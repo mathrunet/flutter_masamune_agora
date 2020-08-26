@@ -94,10 +94,10 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
   static Future<AgoraRTCChannel> connect(String path,
       {String appId,
       String userName,
-      int width = 640,
-      int height = 360,
-      int frameRate = 15,
-      int bitRate = 400,
+      double width = 1280,
+      double height = 720,
+      int frameRate = 24,
+      int bitRate = 0,
       bool enableAudio = true,
       bool enableVideo = true,
       ChannelProfile channelProfile = ChannelProfile.LiveBroadcasting,
@@ -162,8 +162,8 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
 
   AgoraRTCChannel._(
       {String path,
-      int width,
-      int height,
+      double width,
+      double height,
       int frameRate,
       int bitRate,
       bool enableAudio,
@@ -296,6 +296,12 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
         await AgoraRtcEngine.enableVideo().timeout(timeout);
       else
         await AgoraRtcEngine.disableVideo().timeout(timeout);
+      VideoEncoderConfiguration videoConfig = VideoEncoderConfiguration();
+      videoConfig.orientationMode = VideoOutputOrientationMode.FixedPortrait;
+      videoConfig.dimensions = Size(this.width, this.height);
+      videoConfig.frameRate = this.frameRate;
+      videoConfig.bitrate = this.bitRate;
+      await AgoraRtcEngine.setVideoEncoderConfiguration(videoConfig);
       await AgoraRtcEngine.enableDualStreamMode(true).timeout(timeout);
       await AgoraRtcEngine.setRemoteDefaultVideoStreamType(0).timeout(timeout);
       await AgoraRtcEngine.setChannelProfile(this.channelProfile)
@@ -349,12 +355,12 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
   int get localUID => _app.uid;
 
   /// The width of the screen to send to the remote.
-  int get width => this._width;
-  int _width = 320;
+  double get width => this._width;
+  double _width = 320;
 
   /// The height of the screen to send to the remote.
-  int get height => this._height;
-  int _height = 180;
+  double get height => this._height;
+  double _height = 180;
 
   /// The frame rate of the screen sent to the remote.
   int get frameRate => this._frameRate;
