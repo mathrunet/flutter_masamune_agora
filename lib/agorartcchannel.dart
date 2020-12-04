@@ -90,6 +90,7 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
   /// [channelProfile]: Channel profile settings.
   /// [clientRole]: Client role settings.
   /// [timeout]: Timeout setting.
+  /// [orientationMode]: Orientation mode.
   /// [filter]: Callback for filtering user data.
   static Future<AgoraRTCChannel> connect(String path,
       {String appId,
@@ -102,6 +103,8 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
       bool enableVideo = true,
       ChannelProfile channelProfile = ChannelProfile.LiveBroadcasting,
       ClientRole clientRole = ClientRole.Broadcaster,
+      VideoOutputOrientationMode orientationMode =
+          VideoOutputOrientationMode.FixedPortrait,
       Duration timeout = Const.timeout,
       DataDocument Function(DataDocument userInfo) filter}) {
     path = path?.applyTags();
@@ -131,6 +134,7 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
         bitRate: bitRate,
         enableAudio: enableAudio,
         enableVideo: enableVideo,
+        orientationMode: orientationMode,
         channelProfile: channelProfile,
         clientRole: clientRole,
         filter: filter);
@@ -170,10 +174,12 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
       bool enableVideo,
       ChannelProfile channelProfile,
       ClientRole clientRole,
+      VideoOutputOrientationMode orientationMode,
       DataDocument Function(DataDocument userInfo) filter})
       : this._width = width,
         this._height = height,
         this._bitRate = bitRate,
+        this._orientationMode = orientationMode,
         this._frameRate = frameRate,
         this._enableAudio = enableAudio,
         this._enableVideo = enableVideo,
@@ -297,7 +303,7 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
       else
         await AgoraRtcEngine.disableVideo().timeout(timeout);
       VideoEncoderConfiguration videoConfig = VideoEncoderConfiguration();
-      videoConfig.orientationMode = VideoOutputOrientationMode.FixedPortrait;
+      videoConfig.orientationMode = this.orientationMode;
       videoConfig.dimensions = Size(this.width, this.height);
       videoConfig.frameRate = this.frameRate;
       videoConfig.bitrate = this.bitRate;
@@ -369,6 +375,26 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
   /// The bit rate of the screen sent to the remote.
   int get bitRate => this._bitRate;
   int _bitRate = 150;
+
+  /// Orientation mode.
+  VideoOutputOrientationMode get orientationMode => this._orientationMode;
+  VideoOutputOrientationMode _orientationMode =
+      VideoOutputOrientationMode.Adaptative;
+
+  /// Set the screen
+  Future setScreen(double width, double height,
+      {int frameRate, int bitRate}) async {
+    this._width = width;
+    this._height = height;
+    this._frameRate = frameRate ?? this._frameRate;
+    this._bitRate = bitRate ?? this._bitRate;
+    VideoEncoderConfiguration videoConfig = VideoEncoderConfiguration();
+    videoConfig.orientationMode = this.orientationMode;
+    videoConfig.dimensions = Size(this.width, this.height);
+    videoConfig.frameRate = this.frameRate;
+    videoConfig.bitrate = this.bitRate;
+    await AgoraRtcEngine.setVideoEncoderConfiguration(videoConfig);
+  }
 
   /// Channel profile settings.
   ChannelProfile get channelProfile => this._channelProfile;
