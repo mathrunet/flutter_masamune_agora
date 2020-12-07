@@ -4,6 +4,9 @@ part of masamune.agora;
 ///
 /// You can get [uid] and [name] by executing [initialize()].
 class AgoraRTC extends TaskUnit implements ITask {
+  RtcEngine get _engine => this.__engine;
+  RtcEngine __engine;
+
   /// Create a Completer that matches the class.
   ///
   /// Do not use from external class
@@ -75,15 +78,14 @@ class AgoraRTC extends TaskUnit implements ITask {
             path: path, value: null, isTemporary: false, group: -1, order: 10);
   void _initialize({String userName, String appId, Duration timeout}) async {
     try {
-      await AgoraRtcEngine.create(appId).timeout(timeout);
-      await AgoraRtcEngine.enableWebSdkInteroperability(true).timeout(timeout);
-      AgoraRtcEngine.onRegisteredLocalUser = (name, uid) {
+      this.__engine = await RtcEngine.create(appId).timeout(timeout);
+      this._engine.setEventHandler(
+          RtcEngineEventHandler(localUserRegistered: (uid, name) {
         this._name = name;
         this._uid = uid;
         this.done();
-      };
-      await AgoraRtcEngine.registerLocalUserAccount(
-          {"userAccount": userName, "appId": appId}).timeout(timeout);
+      }));
+      this._engine.registerLocalUserAccount(appId, userName).timeout(timeout);
     } catch (e) {
       this.error(e.toString());
     }
@@ -103,12 +105,12 @@ class AgoraRTC extends TaskUnit implements ITask {
   void dispose() {
     if (this.isDisposed || !this.isDisposable) return;
     super.dispose();
-    AgoraRtcEngine.destroy();
+    this._engine.destroy();
   }
 
   /// Callback event when application quit.
   @override
   void onApplicationQuit() {
-    AgoraRtcEngine.destroy();
+    this._engine.destroy();
   }
 }

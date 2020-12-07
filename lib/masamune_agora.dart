@@ -9,7 +9,9 @@
 library masamune.agora;
 
 import 'dart:async';
-import 'package:agora_rtc_engine/agora_rtc_engine.dart';
+import 'package:agora_rtc_engine/rtc_engine.dart';
+import 'package:agora_rtc_engine/rtc_local_view.dart' as RtcLocalView;
+import 'package:agora_rtc_engine/rtc_remote_view.dart' as RtcRemoteView;
 //import 'package:agora_rtm/agora_rtm.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/material.dart';

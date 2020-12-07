@@ -95,9 +95,9 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
   static Future<AgoraRTCChannel> connect(String path,
       {String appId,
       String userName,
-      double width = 1280,
-      double height = 720,
-      int frameRate = 24,
+      int width = 1280,
+      int height = 720,
+      VideoFrameRate frameRate = VideoFrameRate.Fps24,
       int bitRate = 0,
       bool enableAudio = true,
       bool enableVideo = true,
@@ -160,15 +160,15 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
   Future _disconnectIntenal() async {
     if (!this.isDone) return;
     this.init();
-    await AgoraRtcEngine.leaveChannel();
+    await _app._engine.leaveChannel();
     this.done();
   }
 
   AgoraRTCChannel._(
       {String path,
-      double width,
-      double height,
-      int frameRate,
+      int width,
+      int height,
+      VideoFrameRate frameRate,
       int bitRate,
       bool enableAudio,
       bool enableVideo,
@@ -192,15 +192,16 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
             isTemporary: false,
             order: 10,
             group: 0);
-  void _joinRoom({
-    String userId,
-    String appId,
-    Duration timeout,
-  }) async {
+  void _joinRoom({String userId, String appId, Duration timeout}) async {
     try {
       if (_app == null) {
         __app = await AgoraRTC.initialize(
             appId: appId, userName: userId, timeout: timeout);
+      }
+      if (_app._engine == null) {
+        this.error(
+            "The engine is not initialized. Initialize the engine first.");
+        return;
       }
       if (this.enableVideo) {
         PermissionStatus status = await Permission.camera.status;
@@ -211,6 +212,7 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
             this.error("You are not authorized to use the camera service. "
                     "Check the permission settings."
                 .localize());
+            return;
           }
         }
       }
@@ -223,115 +225,149 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
             this.error("You are not authorized to use the microphone service. "
                     "Check the permission settings."
                 .localize());
+            return;
           }
         }
       }
-      AgoraRtcEngine.onError = (dynamic code) {
-        this.error("Error: ${code.toString()}");
-        this.dispose();
-      };
-      AgoraRtcEngine.onUpdatedUserInfo = (info, uid) {
-        if (info == null) return;
-        String id = uid.toString();
-        if (!this.containsID(id)) return;
-        DataDocument data = this.data[id];
-        if (data == null) return;
-        data[Const.name] = info.userAccount;
-        if (this._filter != null) this.data[id] = this._filter(data);
-        Log.msg("Update user information: $uid, ${info.userAccount}");
-        this.notifyUpdate();
-      };
-      AgoraRtcEngine.onJoinChannelSuccess = (
-        String channel,
-        int uid,
-        int elapsed,
-      ) async {
-        String id = uid.toString();
-        if (!this.containsID(id)) {
-          DataDocument data = DataDocument.fromMap(
-              Paths.child(this.path, id), {Const.uid: uid, Const.local: true});
-          if (this._filter != null) data = this._filter(data);
-          this.add(data);
-        }
-        AgoraRtcEngine.onRemoteVideoStateChanged =
-            (uid, state, reason, elapsed) {
-          DataDocument data = this.firstWhere(
-              (value) => value.getInt(Const.uid) == uid,
-              orElse: () => null);
-          if (data == null) return;
-          data["video"] = state == 0 ? false : true;
-          this.notifyUpdate();
-        };
-        Log.msg("Joined the channel: $uid, $channel");
-        this.done();
-      };
-      AgoraRtcEngine.onUserJoined = (int uid, int elapsed) async {
-        String id = uid.toString();
-        if (this.containsID(id)) return;
-        DataDocument data = DataDocument.fromMap(
-            Paths.child(this.path, id), {Const.uid: uid, Const.local: false});
-        if (this._filter != null) data = this._filter(data);
-        this.add(data);
-        Log.msg("The user has joined: $uid");
-        this.notifyUpdate();
-      };
-      AgoraRtcEngine.onUserOffline = (int uid, int reason) async {
-        String id = uid.toString();
-        if (!this.containsID(id)) return;
-        this.removeBy(id);
-        Log.msg("The user has left: $uid");
-        this.notifyUpdate();
-      };
-      AgoraRtcEngine.onLeaveChannel = () {
-        Log.msg("Left the channel.");
-        this.dispose();
-      };
-      AgoraRtcEngine.onFirstRemoteVideoFrame = (
-        int uid,
-        int width,
-        int height,
-        int elapsed,
-      ) {
-        Log.msg("First remote video received: $uid, ($width x $height)");
-      };
+      _app._engine.setEventHandler(
+        RtcEngineEventHandler(
+          error: (err) {
+            this.error("Error: ${err.toString()}");
+            this.dispose();
+          },
+          userInfoUpdated: (uid, info) {
+            if (info == null) return;
+            String id = uid.toString();
+            if (!this.containsID(id)) return;
+            DataDocument data = this.data[id];
+            if (data == null) return;
+            data[Const.name] = info.userAccount;
+            if (this._filter != null) this.data[id] = this._filter(data);
+            Log.msg("Update user information: $uid, ${info.userAccount}");
+            this.notifyUpdate();
+          },
+          joinChannelSuccess: (channel, uid, elapsed) {
+            String id = uid.toString();
+            if (!this.containsID(id)) {
+              DataDocument data = DataDocument.fromMap(
+                  Paths.child(this.path, id),
+                  {Const.uid: uid, Const.local: true});
+              if (this._filter != null) data = this._filter(data);
+              this.add(data);
+            }
+            Log.msg("Joined the channel: $uid, $channel");
+            this.done();
+          },
+          remoteVideoStateChanged: (uid, state, reason, elapsed) {
+            DataDocument data = this.firstWhere(
+                (value) => value.getInt(Const.uid) == uid,
+                orElse: () => null);
+            if (data == null) return;
+            data["video"] = state == VideoRemoteState.Stopped ||
+                    state == VideoRemoteState.Failed ||
+                    state == VideoRemoteState.Frozen
+                ? false
+                : true;
+            this.notifyUpdate();
+          },
+          userJoined: (uid, elapsed) {
+            String id = uid.toString();
+            if (this.containsID(id)) return;
+            DataDocument data = DataDocument.fromMap(Paths.child(this.path, id),
+                {Const.uid: uid, Const.local: false});
+            if (this._filter != null) data = this._filter(data);
+            this.add(data);
+            Log.msg("The user has joined: $uid");
+            this.notifyUpdate();
+          },
+          userOffline: (uid, reason) {
+            String id = uid.toString();
+            if (!this.containsID(id)) return;
+            this.removeBy(id);
+            Log.msg("The user has left: $uid");
+            this.notifyUpdate();
+          },
+          leaveChannel: (stats) {
+            Log.msg("Left the channel.");
+            this.dispose();
+          },
+          firstRemoteVideoFrame: (
+            uid,
+            width,
+            height,
+            elapsed,
+          ) {
+            Log.msg("First remote video received: $uid, ($width x $height)");
+          },
+        ),
+      );
       if (this.enableAudio)
-        await AgoraRtcEngine.enableAudio().timeout(timeout);
+        await _app._engine.enableAudio().timeout(timeout);
       else
-        await AgoraRtcEngine.disableAudio().timeout(timeout);
+        await _app._engine.disableAudio().timeout(timeout);
       if (this.enableVideo)
-        await AgoraRtcEngine.enableVideo().timeout(timeout);
+        await _app._engine.enableVideo().timeout(timeout);
       else
-        await AgoraRtcEngine.disableVideo().timeout(timeout);
+        await _app._engine.disableVideo().timeout(timeout);
       VideoEncoderConfiguration videoConfig = VideoEncoderConfiguration();
       videoConfig.orientationMode = this.orientationMode;
-      videoConfig.dimensions = Size(this.width, this.height);
+      videoConfig.dimensions = VideoDimensions(this.width, this.height);
       videoConfig.frameRate = this.frameRate;
       videoConfig.bitrate = this.bitRate;
-      await AgoraRtcEngine.setVideoEncoderConfiguration(videoConfig);
-      await AgoraRtcEngine.enableDualStreamMode(true).timeout(timeout);
-      await AgoraRtcEngine.setRemoteDefaultVideoStreamType(0).timeout(timeout);
-      await AgoraRtcEngine.setChannelProfile(this.channelProfile)
+      await _app._engine
+          .setVideoEncoderConfiguration(videoConfig)
+          .timeout(timeout);
+      await _app._engine.enableDualStreamMode(true).timeout(timeout);
+      await _app._engine
+          .setRemoteDefaultVideoStreamType(VideoStreamType.High)
+          .timeout(timeout);
+      await _app._engine
+          .setChannelProfile(this.channelProfile)
           .timeout(timeout);
       if (this.channelProfile == ChannelProfile.LiveBroadcasting)
-        await AgoraRtcEngine.setClientRole(this.clientRole).timeout(timeout);
+        await _app._engine.setClientRole(this.clientRole).timeout(timeout);
       // await AgoraRtcEngine.setParameters(
       //         '''{\"che.video.lowBitRateStreamParameter\":{\"width\":${this.width},'''
       //         '''\"height\":${this.height},\"frameRate\":${this.frameRate},'''
       //         '''\"bitRate\":${this.bitRate}}}''')
       //     .timeout(timeout);
-      await AgoraRtcEngine.joinChannelByUserAccount({
-        "userAccount": _app.name,
-        "channelId": this.path.replaceAll(RegExp(r"[^0-9a-zA-Z]"), Const.empty)
-      }).timeout(timeout);
+      await _app._engine
+          .joinChannelWithUserAccount(
+              "",
+              this.path.replaceAll(RegExp(r"[^0-9a-zA-Z]"), Const.empty),
+              _app._name)
+          .timeout(timeout);
     } catch (e) {
       this.error(e.toString());
     }
   }
 
+  /// Start recording audio.
+  ///
+  /// [filePath]: Path to save the recording.
+  /// [sampleRate]: Sample rate to be recorded.
+  /// [quality]: Quality to record.
+  Future startAudioRecording(String filePath,
+      {AudioSampleRateType sampleRate = AudioSampleRateType.Type44100,
+      AudioRecordingQuality quality = AudioRecordingQuality.Medium}) async {
+    if (this._isRecordingAudio) return;
+    this._isRecordingAudio = true;
+    await _app._engine.startAudioRecording(filePath, sampleRate, quality);
+  }
+
+  /// Stop Recording.
+  Future stopAudioRecording() async {
+    if (!this._isRecordingAudio) return;
+    this._isRecordingAudio = false;
+    await _app._engine.stopAudioRecording();
+  }
+
+  bool _isRecordingAudio = false;
+
   /// Gets the current local screen as a widget.
   Widget localScreen() {
     if (!this.isDone) return Container();
-    return AgoraRenderWidget(this.localUID, local: true, preview: true);
+    return RtcLocalView.SurfaceView();
   }
 
   /// Get all screens as widgets, including remote locals.
@@ -348,9 +384,9 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
       if (this.localUID == uid) {
         if (this.channelProfile == ChannelProfile.LiveBroadcasting &&
             this.clientRole == ClientRole.Audience) return null;
-        return AgoraRenderWidget(uid, local: true, preview: true);
+        return RtcLocalView.SurfaceView();
       }
-      return AgoraRenderWidget(uid);
+      return RtcRemoteView.SurfaceView(uid: uid);
     }).removeEmpty();
   }
 
@@ -361,16 +397,16 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
   int get localUID => _app.uid;
 
   /// The width of the screen to send to the remote.
-  double get width => this._width;
-  double _width = 320;
+  int get width => this._width;
+  int _width = 320;
 
   /// The height of the screen to send to the remote.
-  double get height => this._height;
-  double _height = 180;
+  int get height => this._height;
+  int _height = 180;
 
   /// The frame rate of the screen sent to the remote.
-  int get frameRate => this._frameRate;
-  int _frameRate = 15;
+  VideoFrameRate get frameRate => this._frameRate;
+  VideoFrameRate _frameRate = VideoFrameRate.Fps15;
 
   /// The bit rate of the screen sent to the remote.
   int get bitRate => this._bitRate;
@@ -382,18 +418,18 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
       VideoOutputOrientationMode.Adaptative;
 
   /// Set the screen
-  Future setScreen(double width, double height,
-      {int frameRate, int bitRate}) async {
+  Future setScreen(int width, int height,
+      {VideoFrameRate frameRate, int bitRate}) async {
     this._width = width;
     this._height = height;
     this._frameRate = frameRate ?? this._frameRate;
     this._bitRate = bitRate ?? this._bitRate;
     VideoEncoderConfiguration videoConfig = VideoEncoderConfiguration();
     videoConfig.orientationMode = this.orientationMode;
-    videoConfig.dimensions = Size(this.width, this.height);
+    videoConfig.dimensions = VideoDimensions(this.width, this.height);
     videoConfig.frameRate = this.frameRate;
     videoConfig.bitrate = this.bitRate;
-    await AgoraRtcEngine.setVideoEncoderConfiguration(videoConfig);
+    await _app._engine.setVideoEncoderConfiguration(videoConfig);
   }
 
   /// Channel profile settings.
@@ -414,9 +450,9 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
     if (this._enableAudio == enableAudio) return;
     this._enableAudio = enableAudio;
     if (this._enableAudio)
-      AgoraRtcEngine.enableAudio();
+      _app._engine.enableAudio();
     else
-      AgoraRtcEngine.disableAudio();
+      _app._engine.disableAudio();
     this.notifyUpdate();
   }
 
@@ -432,9 +468,9 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
     if (this._enableVideo == enableVideo) return;
     this._enableVideo = enableVideo;
     if (this._enableVideo)
-      AgoraRtcEngine.enableVideo();
+      _app._engine.enableVideo();
     else
-      AgoraRtcEngine.disableVideo();
+      _app._engine.disableVideo();
     this.notifyUpdate();
   }
 
@@ -450,7 +486,7 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
     if (!this.isDone) return;
     if (mute == this._mute) return;
     this._mute = mute;
-    AgoraRtcEngine.muteAllRemoteAudioStreams(this._mute);
+    _app._engine.muteAllRemoteAudioStreams(this._mute);
     this.notifyUpdate();
   }
 
@@ -459,7 +495,7 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
   /// Switches the camera in / out.
   void switchCamera() {
     if (!this.isDone) return;
-    AgoraRtcEngine.switchCamera();
+    _app._engine.switchCamera();
     this.notifyUpdate();
   }
 
@@ -477,14 +513,8 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
   void dispose() {
     if (this.isDisposed || !this.isDisposable) return;
     super.dispose();
-    AgoraRtcEngine.leaveChannel();
-    AgoraRtcEngine.onError = null;
-    AgoraRtcEngine.onJoinChannelSuccess = null;
-    AgoraRtcEngine.onFirstRemoteVideoFrame = null;
-    AgoraRtcEngine.onUserJoined = null;
-    AgoraRtcEngine.onUserOffline = null;
-    AgoraRtcEngine.onLeaveChannel = null;
-    AgoraRtcEngine.onRemoteVideoStateChanged = null;
+    _app._engine.leaveChannel();
+    _app._engine.setEventHandler(RtcEngineEventHandler());
   }
 
   /// Get the toolbar as a widget.
@@ -547,13 +577,7 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
   /// Callback event when application quit.
   @override
   void onApplicationQuit() {
-    AgoraRtcEngine.leaveChannel();
-    AgoraRtcEngine.onError = null;
-    AgoraRtcEngine.onJoinChannelSuccess = null;
-    AgoraRtcEngine.onFirstRemoteVideoFrame = null;
-    AgoraRtcEngine.onUserJoined = null;
-    AgoraRtcEngine.onUserOffline = null;
-    AgoraRtcEngine.onLeaveChannel = null;
-    AgoraRtcEngine.onRemoteVideoStateChanged = null;
+    _app._engine.leaveChannel();
+    _app._engine.setEventHandler(RtcEngineEventHandler());
   }
 }
