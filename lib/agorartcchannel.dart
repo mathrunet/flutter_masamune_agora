@@ -353,6 +353,7 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
     if (this._isRecordingAudio) return;
     this._isRecordingAudio = true;
     await _app._engine.startAudioRecording(filePath, sampleRate, quality);
+    this.notifyUpdate();
   }
 
   /// Stop Recording.
@@ -360,8 +361,11 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
     if (!this._isRecordingAudio) return;
     this._isRecordingAudio = false;
     await _app._engine.stopAudioRecording();
+    this.notifyUpdate();
   }
 
+  /// If you are currently recording, True.
+  bool get isRecordingAudio => this._isRecordingAudio;
   bool _isRecordingAudio = false;
 
   /// Gets the current local screen as a widget.

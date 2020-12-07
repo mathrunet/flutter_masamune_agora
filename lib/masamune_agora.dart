@@ -19,6 +19,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:masamune_flutter/masamune_flutter.dart';
 export 'package:masamune_mobile/masamune_mobile.dart';
 export 'package:masamune_flutter/masamune_flutter.dart';
+export 'package:agora_rtc_engine/rtc_engine.dart' hide Color, Rect;
 
 part 'agorartc.dart';
 part 'agorartcchannel.dart';
