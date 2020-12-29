@@ -7,6 +7,16 @@ class AgoraRTC extends TaskUnit implements ITask {
   RtcEngine get _engine => this.__engine;
   RtcEngine __engine;
 
+  /// App ID.
+  String get appId => this._appId;
+  String _appId;
+
+  /// Customer ID.
+  String get customerId => this._customerId;
+  String _customerId;
+  String _customerSecret;
+  AgoraStorageBucketConfig _storageBucketConfig;
+
   /// Create a Completer that matches the class.
   ///
   /// Do not use from external class
@@ -51,10 +61,15 @@ class AgoraRTC extends TaskUnit implements ITask {
   /// [appId]: Application ID.
   /// [userName]: USER NAME.
   /// [timeout]: Timeout setting.
+  /// [customerId]: Customer ID.
+  /// [customerSecret]: Customer Secret.
   static Future<AgoraRTC> initialize(
       {@required String appId,
       @required String userName,
-      Duration timeout = Const.timeout}) {
+      String customerId,
+      String customerSecret,
+      Duration timeout = Const.timeout,
+      AgoraStorageBucketConfig storageBucketConfig}) {
     assert(isNotEmpty(appId));
     assert(isNotEmpty(userName));
     if (isEmpty(appId)) {
@@ -68,7 +83,13 @@ class AgoraRTC extends TaskUnit implements ITask {
     AgoraRTC unit = PathMap.get<AgoraRTC>(_systemPath);
     if (unit != null) return unit.future;
     unit = AgoraRTC._(path: _systemPath);
-    unit._initialize(appId: appId, userName: userName, timeout: timeout);
+    unit._initialize(
+        appId: appId,
+        userName: userName,
+        timeout: timeout,
+        customerId: customerId,
+        customerSecret: customerSecret,
+        storageBucketConfig: storageBucketConfig);
     return unit.future;
   }
 
@@ -76,7 +97,13 @@ class AgoraRTC extends TaskUnit implements ITask {
   AgoraRTC._({String path})
       : super(
             path: path, value: null, isTemporary: false, group: -1, order: 10);
-  void _initialize({String userName, String appId, Duration timeout}) async {
+  void _initialize(
+      {String userName,
+      String appId,
+      Duration timeout,
+      String customerId,
+      String customerSecret,
+      AgoraStorageBucketConfig storageBucketConfig}) async {
     try {
       this.__engine = await RtcEngine.create(appId).timeout(timeout);
       this._engine.setEventHandler(
@@ -86,6 +113,10 @@ class AgoraRTC extends TaskUnit implements ITask {
         this.done();
       }));
       this._engine.registerLocalUserAccount(appId, userName).timeout(timeout);
+      this._appId = appId;
+      this._customerId = customerId;
+      this._customerSecret = customerSecret;
+      this._storageBucketConfig = storageBucketConfig;
     } catch (e) {
       this.error(e.toString());
     }

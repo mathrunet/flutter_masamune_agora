@@ -12,6 +12,7 @@ part of masamune.agora;
 ///
 /// Finally, leave the room by executing [disconnect()].
 class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
+  static const String _agoraURL = "https://api.agora.io/v1/apps";
   DataDocument Function(DataDocument userInfo) _filter;
 
   /// Create a Completer that matches the class.
@@ -90,6 +91,7 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
   /// [channelProfile]: Channel profile settings.
   /// [clientRole]: Client role settings.
   /// [timeout]: Timeout setting.
+  /// [enableScreenCaptureOnConnect]: Start screen capture at the start.
   /// [orientationMode]: Orientation mode.
   /// [filter]: Callback for filtering user data.
   static Future<AgoraRTCChannel> connect(String path,
@@ -101,6 +103,7 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
       int bitRate = 0,
       bool enableAudio = true,
       bool enableVideo = true,
+      bool enableScreenCaptureOnConnect = false,
       ChannelProfile channelProfile = ChannelProfile.LiveBroadcasting,
       ClientRole clientRole = ClientRole.Broadcaster,
       VideoOutputOrientationMode orientationMode =
@@ -138,7 +141,12 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
         channelProfile: channelProfile,
         clientRole: clientRole,
         filter: filter);
-    collection._joinRoom(appId: appId, userId: userName, timeout: timeout);
+    collection._joinRoom(
+      appId: appId,
+      userId: userName,
+      timeout: timeout,
+      enableScreenCaptureOnConnect: enableScreenCaptureOnConnect,
+    );
     return collection.future;
   }
 
@@ -192,7 +200,12 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
             isTemporary: false,
             order: 10,
             group: 0);
-  void _joinRoom({String userId, String appId, Duration timeout}) async {
+  void _joinRoom({
+    String userId,
+    String appId,
+    Duration timeout,
+    bool enableScreenCaptureOnConnect,
+  }) async {
     try {
       if (_app == null) {
         __app = await AgoraRTC.initialize(
@@ -246,7 +259,7 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
             Log.msg("Update user information: $uid, ${info.userAccount}");
             this.notifyUpdate();
           },
-          joinChannelSuccess: (channel, uid, elapsed) {
+          joinChannelSuccess: (channel, uid, elapsed) async {
             String id = uid.toString();
             if (!this.containsID(id)) {
               DataDocument data = DataDocument.fromMap(
@@ -254,6 +267,11 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
                   {Const.uid: uid, Const.local: true});
               if (this._filter != null) data = this._filter(data);
               this.add(data);
+              if (enableScreenCaptureOnConnect &&
+                  this.channelProfile == ChannelProfile.LiveBroadcasting &&
+                  this.clientRole == ClientRole.Broadcaster) {
+                await this.startScreenCapture();
+              }
             }
             Log.msg("Joined the channel: $uid, $channel");
             this.done();
@@ -340,6 +358,145 @@ class AgoraRTCChannel extends TaskCollection<DataDocument> implements ITask {
     } catch (e) {
       this.error(e.toString());
     }
+  }
+
+  /// Start taking screenshots.
+  Future startScreenCapture() async {
+    if (_app == null ||
+        isEmpty(_app._customerId) ||
+        isEmpty(_app._customerSecret)) {
+      Log.error(
+          "Either it has not been initialized or the Customer ID and Customer Secret have not been set.");
+      return;
+    }
+    this.__recordingId = null;
+    Response res = await post(
+      "$_agoraURL/${_app.appId}/cloud_recording/acquire",
+      headers: {
+        "Content-Type": "application/json;charset=utf-8",
+        "Authorization":
+            "Basic ${base64Encode(utf8.encode(_app._customerId + ":" + _app._customerSecret))}"
+      },
+      body: jsonEncode(
+        {
+          "cname": this.path.replaceAll(RegExp(r"[^0-9a-zA-Z]"), Const.empty),
+          "uid": this._recordingId,
+          "clientRequest": {"resourceExpiredHour": 1},
+        },
+      ),
+    );
+    if (res.statusCode == 200) {
+      Map<String, dynamic> map = jsonDecode(res.body);
+      if (map.containsKey("resourceId")) {
+        Response result = await post(
+          "$_agoraURL/${_app.appId}/cloud_recording/resourceid/${map["resourceId"]}/mode/individual/start",
+          headers: {
+            "Content-Type": "application/json;charset=utf-8",
+            "Authorization":
+                "Basic ${base64Encode(utf8.encode(_app._customerId + ":" + _app._customerSecret))}"
+          },
+          body: jsonEncode(
+            {
+              "cname":
+                  this.path.replaceAll(RegExp(r"[^0-9a-zA-Z]"), Const.empty),
+              "uid": this._recordingId,
+              "clientRequest": {
+                "recordingConfig": {
+                  "maxIdleTime": 30,
+                  "streamTypes": 2,
+                  "channelType": 1,
+                  "subscribeUidGroup": 0
+                },
+                "snapshotConfig": {
+                  "captureInterval": 30,
+                  "fileType": ["jpg"]
+                },
+                "storageConfig": {
+                  "accessKey": _app._storageBucketConfig?.accessKey,
+                  "region": _app._storageBucketConfig?.region?.index ?? 10,
+                  "bucket": _app._storageBucketConfig?.bucketName,
+                  "secretKey": _app._storageBucketConfig?.secretKey,
+                  "vendor": 1,
+                  "fileNamePrefix": isEmpty(_app._storageBucketConfig?.path)
+                      ? []
+                      : _app._storageBucketConfig?.path?.split("/")
+                }
+              },
+            },
+          ),
+        );
+        if (result.statusCode == 200) {
+          Map<String, dynamic> resultMap = jsonDecode(result.body);
+          if (resultMap.containsKey("sid")) {
+            this._sid = resultMap["sid"] as String;
+            this._resourceId = resultMap["resourceId"] as String;
+          } else {
+            Log.error("The capture could not be started.");
+          }
+          Log.msg(result.body);
+        } else {
+          Log.error(result.body);
+        }
+      } else {
+        Log.error("The response is invalid.");
+      }
+    } else {
+      Log.error(res.body);
+    }
+  }
+
+  /// Stop taking screen shots.
+  Future stopScreenCapture() async {
+    if (isEmpty(this._sid) || isEmpty(this._resourceId)) return;
+    Response res = await post(
+      "$_agoraURL/${_app.appId}/cloud_recording/resourceid/${this._resourceId}/sid/${this._resourceId}/mode/individual/stop",
+      headers: {
+        "Content-Type": "application/json;charset=utf-8",
+        "Authorization":
+            "Basic ${base64Encode(utf8.encode(_app._customerId + ":" + _app._customerSecret))}"
+      },
+      body: jsonEncode(
+        {
+          "cname": this.path.replaceAll(RegExp(r"[^0-9a-zA-Z]"), Const.empty),
+          "uid": this._recordingId,
+        },
+      ),
+    );
+    if (res.statusCode == 200) {
+      Log.msg(res.body);
+    } else {
+      Log.error(res.body);
+    }
+  }
+
+  /// URL for screen captures.
+  String get screenCaptureURL {
+    String region = _app._storageBucketConfig?.region
+        ?.toString()
+        ?.replaceAll("AWSRegion", "")
+        ?.replaceAll("_", "-");
+    return "https://${_app._storageBucketConfig?.bucketName}.s3-$region.amazonaws.com/${this.path.replaceAll(RegExp(r"[^0-9a-zA-Z]"), Const.empty)}.jpg";
+  }
+
+  String _sid;
+  String _resourceId;
+
+  String get _recordingId {
+    if (isNotEmpty(this.__recordingId)) return this.__recordingId;
+    int id = 0;
+    do {
+      id = Random().nextInt(100000);
+    } while (this.any((element) => element.getInt(Const.uid) == id));
+    return this.__recordingId = id.toString();
+  }
+
+  String __recordingId;
+
+  /// Own user id.
+  String get ownId {
+    IDataDocument doc =
+        this.firstWhere((element) => element.getBool(Const.local));
+    return doc.getInt(Const.uid).toString();
   }
 
   /// Start recording audio.

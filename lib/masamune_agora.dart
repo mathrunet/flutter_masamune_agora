@@ -9,10 +9,13 @@
 library masamune.agora;
 
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
 import 'package:agora_rtc_engine/rtc_engine.dart';
 import 'package:agora_rtc_engine/rtc_local_view.dart' as RtcLocalView;
 import 'package:agora_rtc_engine/rtc_remote_view.dart' as RtcRemoteView;
 //import 'package:agora_rtm/agora_rtm.dart';
+import 'package:http/http.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -23,5 +26,6 @@ export 'package:agora_rtc_engine/rtc_engine.dart' hide Color, Rect;
 
 part 'agorartc.dart';
 part 'agorartcchannel.dart';
+part 'agorastoragebucketconfig.dart';
 // part 'agorartm.dart';
 // part 'agorartmchannel.dart';
